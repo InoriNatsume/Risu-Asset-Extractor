@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RisuAI 통합 에셋 추출기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="module" src="https://esm.sh/png-chunks-extract"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>RisuAI 통합 에셋 추출기</h1>
+        <p>캐릭터 카드(.png, .charx) 또는 모듈(.risum) 파일에서 에셋을 추출합니다.</p>
+        
+        <div class="tab-container">
+            <button class="tab-button active" onclick="openTab(event, 'cardExtractor')">캐릭터 카드 추출기</button>
+            <button class="tab-button" onclick="openTab(event, 'moduleExtractor')">모듈(.risum) 추출기</button>
+        </div>
+
+        <!-- 캐릭터 카드 추출기 탭 -->
+        <div id="cardExtractor" class="tab-content" style="display: block;">
+            <h2>캐릭터 카드 에셋 추출</h2>
+            <p>.png 또는 .charx 파일을 아래 영역에 드래그 앤 드롭하거나 클릭하여 선택하세요. jpg, jpeg도 지원. json은 지원X.</p>
+            <div class="drop-zone" id="cardDropZone">
+                <input type="file" id="cardFileInput" accept=".png,.charx,.jpg,.jpeg" style="display: none;">
+                <p>파일을 여기에 드롭하세요</p>
+            </div>
+            <div id="cardStatus" class="status"></div>
+            
+            <div id="cardStructureContainer" style="display: none;">
+                <div class="structure-header">
+                    <h3>파일 구조 정보 (메타데이터)</h3>
+                </div>
+                <pre id="cardStructureView"></pre> 
+            </div>
+
+            <!-- [수정됨] 다운로드 버튼 그룹 -->
+            <div id="cardDownloadButtons" class="button-group" style="display: none;">
+                <div>
+                    <button id="cardDownloadAssetsByNameBtn" class="download-button">에셋 다운로드(파일명만으로 네이밍)</button>
+                    <p class="button-description">메타데이터의 이름만으로 에셋을 저장합니다. <strong>파일 이름이 중복되어 덮어쓰여지는 문제를 해결하기 위해,</strong> 중복된 이름의 에셋이 존재할 시에 파일명 뒤에 메타데이터에서 확인되는 번호를 붙입니다 (예: `이름_123.png`).</p>
+                </div>
+                <div>
+                    <button id="cardDownloadAssetsNumberedBtn" class="download-button">에셋 다운로드 (번호_파일명으로 네이밍)</button>
+                    <p class="button-description">모든 에셋 파일명 앞에 메타데이터상의 번호를 붙여 (예: `123_이름.png`) 저장합니다.</p>
+                </div>
+                <div>
+                    <button id="cardDownloadStructureBtn" class="download-button btn-secondary">메타데이터(JSON) 다운로드</button>
+                     <p class="button-description">카드에 포함된 모든 설정과 에셋 정보를 담고 있는 원본 `card.json` 데이터를 다운로드합니다.</p>
+                </div>
+            </div>
+            <div id="cardResults" class="results"></div>
+        </div>
+
+        <!-- 모듈 추출기 탭 (변경 없음) -->
+        <div id="moduleExtractor" class="tab-content">
+            <h2>모듈(.risum) 에셋 추출</h2>
+            <p>.risum 파일을 아래 영역에 드래그 앤 드롭하거나 클릭하여 선택하세요.</p>
+             <div class="drop-zone" id="moduleDropZone">
+                <input type="file" id="moduleFileInput" accept=".risum" style="display: none;">
+                 <p>파일을 여기에 드롭하세요</p>
+            </div>
+            <div id="moduleStatus" class="status"></div>
+            <div id="moduleStructureContainer" style="display: none;">
+                <div class="structure-header">
+                    <h3>파일 구조 정보</h3>
+                    <button id="moduleDownloadStructureBtn" class="btn-secondary">JSON 다운로드</button>
+                </div>
+                <pre id="moduleStructureView"></pre>
+            </div>
+            <button id="moduleDownloadAllBtn" class="download-button" style="display: none;">모든 에셋을 ZIP으로 다운로드</button>
+            <div id="moduleResults" class="results"></div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+    </script>
+    <script type="module" src="./card-extractor.js"></script>
+    <script type="module" src="./module-extractor.js"></script>
+
+    <!-- 👇 아래 footer 코드를 추가하세요 -->
+    <footer>
+        <a href="https://github.com/InoriNatsume/RisuAI-Asset-Extractor" target="_blank" title="GitHub Repository">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 16 16" fill="currentColor" role="img" aria-label="GitHub Icon">
+                <title>GitHub Repository</title>
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+        </a>
+    </footer>
+
+</body>
+</html>
