@@ -200,7 +200,7 @@ async function handlePng(buffer) {
                 ({ uri, name, ext } = item);
             } else if (Array.isArray(item) && item.length >= 2) {
                 const pathParts = item[0].split(/[\\/]/);
-                name = pathParts.pop().replace(/\.[^/.]+$/, "");
+                name = pathParts.pop();
                 uri = item[1];
                 ext = item.length > 2 ? item[2] : 'png';
             } else return;
