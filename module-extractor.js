@@ -6,6 +6,7 @@ const fileInput = document.getElementById('moduleFileInput');
 const resultsDiv = document.getElementById('moduleResults');
 const statusDiv = document.getElementById('moduleStatus');
 const downloadAllBtn = document.getElementById('moduleDownloadAllBtn');
+const duplicateWarningDiv = document.getElementById('moduleDuplicateWarning');
 const structureContainer = document.getElementById('moduleStructureContainer');
 const structureView = document.getElementById('moduleStructureView');
 const downloadStructureBtn = document.getElementById('moduleDownloadStructureBtn');
@@ -51,6 +52,9 @@ async function handleFileSelect(file) {
     structureContainer.style.display = 'none';
     structureView.textContent = '';
     downloadStructureBtn.onclick = null;
+    // --- [추가됨] 안내 문구 초기화 ---
+    duplicateWarningDiv.style.display = 'none';
+    duplicateWarningDiv.textContent = '';
 
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -88,9 +92,7 @@ async function handleFileSelect(file) {
             URL.revokeObjectURL(url);
         };
 
-        // --- 변경된 부분 시작 ---
-
-        const totalAssets = moduleInfo.assets ? moduleInfo.assets.length : 0; // 1. 전체 에셋 개수 저장
+        const totalAssets = moduleInfo.assets ? moduleInfo.assets.length : 0;
 
         if (totalAssets === 0) {
             statusDiv.textContent = '완료: 이 파일에는 추출할 에셋이 없습니다.';
@@ -100,12 +102,13 @@ async function handleFileSelect(file) {
 
         statusDiv.textContent = `"${moduleInfo.name}" 모듈에서 ${totalAssets}개의 에셋을 발견했습니다. 추출을 시작합니다...`;
 
-        // --- 변경된 부분 끝 ---
-
         const zip = new JSZip();
+        const usedNames = new Set();
         let assetIndex = 0;
+        // --- [추가됨] 중복 발생 여부를 추적할 변수 ---
+        let wasDuplicateDetected = false;
 
-        while (pos < uint8Array.length && assetIndex < totalAssets) { // 조건문에 totalAssets 사용
+        while (pos < uint8Array.length && assetIndex < totalAssets) {
             const marker = readByte();
             if (marker === 0) break;
             if (marker !== 1) continue;
@@ -113,42 +116,54 @@ async function handleFileSelect(file) {
             const assetLen = readLength();
             const assetDataPacked = readData(assetLen);
             const assetDataDecoded = await decodeRPack(assetDataPacked);
-            // --- 교체할 코드 (새로운 코드) ---
+
             const [assetId, _, assetType] = moduleInfo.assets[assetIndex];
 
-            let filename = assetId;
+            let baseFilename = assetId;
             let extension = null;
 
-            // 1. assetType 필드에서 확장자를 우선적으로 가져옵니다. (예: 'image/png' -> 'png')
             if (assetType && typeof assetType === 'string') {
                 const typeParts = assetType.split('/');
                 if (typeParts.length > 0) {
                     const potentialExt = typeParts.pop();
-                    // 간단한 유효성 검사를 통해 'png' 같은 짧은 확장자만 사용하도록 합니다.
                     if (potentialExt && potentialExt.length > 0 && potentialExt.length < 5) {
                         extension = potentialExt;
                     }
                 }
             }
 
-            // 2. assetType에서 확장자를 얻지 못했다면, 파일의 바이트 시그니처를 통해 추측합니다.
             if (!extension) {
                 extension = getExtensionFromBytes(assetDataDecoded);
             }
 
-            // 3. 유효한 확장자를 찾았고, 원래 파일 이름이 그 확장자로 끝나지 않는 경우에만 덧붙입니다.
-            //    이렇게 하면 'image.png'에 'png'가 중복으로 붙지 않고, 'image.webp'에는 'png'가 정상적으로 붙습니다.
-            if (extension && !filename.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) {
-                filename = `${filename}.${extension}`;
+            if (extension && !baseFilename.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) {
+                baseFilename = `${baseFilename}.${extension}`;
             }
 
-            zip.file(filename, assetDataDecoded);
-            // --- 여기까지 ---
-            assetIndex++;
+            let finalFilename = baseFilename;
+            if (usedNames.has(finalFilename.toLowerCase())) {
+                // --- [추가됨] 중복이 감지되면 플래그를 true로 설정 ---
+                wasDuplicateDetected = true;
+                const lastDotIndex = baseFilename.lastIndexOf('.');
+                if (lastDotIndex !== -1) {
+                    const nameWithoutExt = baseFilename.substring(0, lastDotIndex);
+                    const ext = baseFilename.substring(lastDotIndex + 1);
+                    finalFilename = `${nameWithoutExt}_${assetIndex}.${ext}`;
+                } else {
+                    finalFilename = `${baseFilename}_${assetIndex}`;
+                }
+            }
+            zip.file(finalFilename, assetDataDecoded);
+            usedNames.add(finalFilename.toLowerCase());
 
-            // --- 추가된 부분 시작 ---
-            statusDiv.textContent = `추출 중... (${assetIndex} / ${totalAssets})`; // 2. 루프 내에서 상태 업데이트
-            // --- 추가된 부분 끝 ---
+            assetIndex++;
+            statusDiv.textContent = `추출 중... (${assetIndex} / ${totalAssets})`;
+        }
+
+        // --- [추가됨] 모든 루프가 끝난 후, 중복이 있었다면 안내 문구 표시 ---
+        if (wasDuplicateDetected) {
+            duplicateWarningDiv.innerHTML = '<strong>안내:</strong> 일부 에셋의 이름이 중복되어 파일명 뒤에 고유 번호(예: <code>이름_123.png</code>)를 추가했습니다. <br>이 번호는 파일의 원본 순서(인덱스)이며, 연속적인 숫자가 아닐 수 있습니다.';
+            duplicateWarningDiv.style.display = 'block';
         }
 
         if (assetIndex > 0) {
@@ -170,9 +185,7 @@ async function handleFileSelect(file) {
         }
 
         statusDiv.className = 'status success';
-        // --- 변경된 부분 시작 ---
-        statusDiv.textContent = `추출 완료: 총 ${totalAssets}개의 에셋 중 ${assetIndex}개를 성공적으로 추출했습니다.`; // 3. 최종 완료 메시지 수정
-        // --- 변경된 부분 끝 ---
+        statusDiv.textContent = `추출 완료: 총 ${totalAssets}개의 에셋 중 ${assetIndex}개를 성공적으로 추출했습니다.`;
 
     } catch (error) {
         statusDiv.textContent = `오류가 발생했습니다: ${error.message}`;
